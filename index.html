@@ -96,7 +96,7 @@
             </div>
         </div>
         <div class="flex items-center gap-4">
-            <div v-if="apiKey || hasServerKey" class="text-xs text-green-600 flex items-center gap-1">
+            <div v-if="apiKey" class="text-xs text-green-600 flex items-center gap-1">
                 <i class="fa-solid fa-circle text-[8px]"></i> 已连接 AI
             </div>
             <button @click="showApiModal = true" class="text-gray-500 hover:text-indigo-600 transition">
@@ -145,19 +145,19 @@
         <section class="flex-1 glass-panel m-4 ml-2 rounded-2xl flex flex-col relative shadow-xl overflow-hidden">
             
             <!-- Stage 0: 初始欢迎 & API 输入 (如果在 Modal 没输的话) -->
-            <div v-if="!apiKey && !hasServerKey" class="absolute inset-0 z-50 bg-white/90 backdrop-blur flex items-center justify-center flex-col p-8 text-center">
+            <div v-if="!apiKey" class="absolute inset-0 z-50 bg-white/90 backdrop-blur flex items-center justify-center flex-col p-8 text-center">
                 <div class="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-4xl mb-6 animate-bounce">
                     <i class="fa-solid fa-key"></i>
                 </div>
                 <h2 class="text-2xl font-bold text-gray-800 mb-2">开启自我探索之旅</h2>
-                <p class="text-gray-500 mb-8 max-w-md">请输入 Google Gemini API Key 或直接使用已配置的后端默认 Key。</p>
+                <p class="text-gray-500 mb-8 max-w-md">请输入 Google Gemini API Key 以启动“言出我才”引擎。<br>您的 Key 仅存储在本地浏览器中。</p>
                 <div class="flex gap-2 w-full max-w-md">
                     <input v-model="tempKey" type="password" placeholder="粘贴 API Key (AIzaSy...)" class="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none">
                     <button @click="saveKey" class="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 font-medium transition shadow-lg hover:shadow-indigo-500/30">
                         启动
                     </button>
                 </div>
-                <p class="mt-4 text-xs text-gray-400">支持 gemini 模型族</p>
+                <p class="mt-4 text-xs text-gray-400">支持 gemini-1.5-flash 模型</p>
             </div>
 
             <!-- Stage 1 & 2: 对话界面 -->
@@ -376,7 +376,6 @@
         setup() {
             // 状态定义
             const apiKey = ref(localStorage.getItem('gemini_key') || '');
-            const hasServerKey = ref(false);
             const tempKey = ref('');
             const showApiModal = ref(false);
             const stage = ref('chat'); // chat, analyzing, result
@@ -442,10 +441,10 @@
                 let attempt = 0;
                 while (true) {
                     try {
-                        const response = await fetch(`http://localhost:8765/api/generate`, {
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ model: MODEL, contents })
+                            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.value },
+                            body: JSON.stringify({ contents })
                         });
                         if (response.ok) {
                             const data = await response.json();
@@ -472,7 +471,11 @@
             // 发送消息
             const sendMessage = async () => {
                 if (!userInput.value.trim() || isLoading.value) return;
-                
+                if (!apiKey.value) {
+                    showApiModal.value = true;
+                    chatHistory.value.push({ role: 'model', text: '(系统提示: 未设置 API Key，请先在右上角设置)' });
+                    return;
+                }
                 
                 const text = userInput.value;
                 chatHistory.value.push({ role: 'user', text: text });
@@ -668,30 +671,16 @@
                 }
             };
 
-            onMounted(async () => {
-                const qs = new URLSearchParams(location.search);
-                const hs = new URLSearchParams(location.hash.replace(/^#/, ''));
-                const injected = qs.get('key') || hs.get('key') || (window.__GEMINI_KEY__ || '');
-                if (injected) {
-                    apiKey.value = injected;
-                    localStorage.setItem('gemini_key', injected);
-                }
+            onMounted(() => {
                 if (location.protocol === 'file:' && !apiKey.value) {
                     chatHistory.value.push({ role: 'model', text: '(系统提示: 请使用 http://localhost 通过本地服务器打开此页面，或在 Google Cloud Console 将 API Key 的应用限制设置为“无”。直接以 file:// 打开可能因 Referer 限制导致请求失败。)' });
                 }
-                try {
-                    const r = await fetch('http://localhost:8765/api/health');
-                    if (r.ok) {
-                        const j = await r.json();
-                        hasServerKey.value = !!j.has_key;
-                    }
-                } catch {}
             });
 
             return {
                 apiKey, tempKey, showApiModal, saveKey,
                 stage, mode, userInput, chatHistory, sendMessage, isLoading,
-                todoList, insights, hasServerKey,
+                todoList, insights,
                 resumeData, careerSuggestions, matchScore, feedbackQuote,
                 renderMarkdown, downloadPDF, resetApp, analysisStatus
             };
