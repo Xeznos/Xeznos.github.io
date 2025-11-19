@@ -669,6 +669,13 @@
             };
 
             onMounted(async () => {
+                const qs = new URLSearchParams(location.search);
+                const hs = new URLSearchParams(location.hash.replace(/^#/, ''));
+                const injected = qs.get('key') || hs.get('key') || (window.__GEMINI_KEY__ || '');
+                if (injected) {
+                    apiKey.value = injected;
+                    localStorage.setItem('gemini_key', injected);
+                }
                 if (location.protocol === 'file:' && !apiKey.value) {
                     chatHistory.value.push({ role: 'model', text: '(系统提示: 请使用 http://localhost 通过本地服务器打开此页面，或在 Google Cloud Console 将 API Key 的应用限制设置为“无”。直接以 file:// 打开可能因 Referer 限制导致请求失败。)' });
                 }
